@@ -87,6 +87,7 @@
     <div class="row">
       <button class="primary" id="start-btn">Start</button>
       <button class="stop" id="stop-btn" disabled>Stop</button>
+      <button id="quit-btn" style="margin-left:auto">Quit app</button>
     </div>
     <div id="run-error"></div>
     <h2 style="margin-top:1.2rem">Activity</h2>
@@ -318,9 +319,28 @@ document.getElementById("stop-btn").addEventListener("click", async () => {
   pollRunStatus();
 });
 
+document.getElementById("quit-btn").addEventListener("click", async () => {
+  if (!confirm("Quit the app? This stops recognition (if running) and closes the server.")) return;
+  document.querySelectorAll("button").forEach(b => b.disabled = true);
+  try {
+    await fetch("/api/quit", { method: "POST" });
+  } catch (e) {
+    // Expected -- the server drops the connection as it exits.
+  }
+  clearInterval(pollTimer);
+  document.body.innerHTML =
+    '<div style="max-width:480px;margin:4rem auto;text-align:center;font-family:-apple-system,\'Segoe UI\',Arial,sans-serif;">' +
+    '<h1>App stopped</h1><p>You can close this browser tab.</p></div>';
+});
+
 async function pollRunStatus() {
-  const res = await fetch("/api/run/status");
-  const data = await res.json();
+  let res, data;
+  try {
+    res = await fetch("/api/run/status");
+    data = await res.json();
+  } catch (e) {
+    return; // server not reachable (e.g. mid-quit) -- just skip this tick
+  }
   latestRunStatus = data.status;
 
   const dot = document.getElementById("status-dot");
@@ -344,7 +364,7 @@ async function pollRunStatus() {
 
 loadCommands();
 pollRunStatus();
-setInterval(pollRunStatus, 1000);
+const pollTimer = setInterval(pollRunStatus, 1000);
 </script>
 </body>
 </html>

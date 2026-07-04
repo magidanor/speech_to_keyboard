@@ -9,7 +9,10 @@ Then open http://127.0.0.1:5000
 
 The Run tab starts src.main.run() in a background thread rather than
 shelling out to a second process, so start/stop and live activity logging
-are just API calls against this same server.
+are just API calls against this same server. A Quit control (POST
+/api/quit) stops the pipeline and terminates the whole server process --
+the intended way to close the app when it's launched via a double-click
+launcher with no terminal to Ctrl+C.
 
 Phrase testing always uses the Vosk engine (regardless of `engine:` in
 config.yaml) since it can test arbitrary typed/spoken phrases against a
@@ -21,6 +24,7 @@ one of them can be active at a time (enforced server-side).
 import argparse
 import collections
 import logging
+import os
 import queue
 import threading
 import time
@@ -367,6 +371,24 @@ def run_status():
     )
 
 
+@app.post("/api/quit")
+def quit_app():
+    """Shuts down the whole app -- the point of this endpoint is to give
+    non-technical users (running via a double-click launcher, with no
+    terminal to Ctrl+C) a way to close the program from inside it.
+    """
+    stop_event: Optional[threading.Event] = _state.get("run_stop_event")
+    if _state["run_status"] in ("running", "stopping") and stop_event is not None:
+        stop_event.set()
+        thread: Optional[threading.Thread] = _state.get("run_thread")
+        if thread is not None:
+            thread.join(timeout=5.0)
+
+    # Reply before the process disappears out from under this request.
+    threading.Timer(0.3, lambda: os._exit(0)).start()
+    return jsonify({"ok": True})
+
+
 def create_app(config_path: str = "config.yaml") -> Flask:
     _state["config_path"] = config_path
     config = load_config(config_path)
@@ -384,9 +406,17 @@ def main(argv=None) -> int:
     parser.add_argument("--config", default="config.yaml")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=5000)
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Also log each HTTP request (noisy: the UI polls once a second)"
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+    # The frontend polls /api/run/status once a second; Werkzeug's dev server
+    # logs every request at INFO by default, which drowns out anything else
+    # in the terminal. Keep that quiet unless explicitly asked for.
+    logging.getLogger("werkzeug").setLevel(logging.INFO if args.verbose else logging.WARNING)
+
     create_app(args.config)
     print(f"Open http://{args.host}:{args.port} in your browser.")
     # threaded=True: status polling and other API calls shouldn't block behind

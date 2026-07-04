@@ -11,3 +11,6 @@ models/*
 !models/.gitkeep
 
 .env
+
+# Written by the double-click launchers (see "Start Speech To Keyboard.*")
+app.log
