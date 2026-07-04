@@ -28,27 +28,38 @@ matching:
 # the Vosk engine) and/or a rhino_intent name (for the Rhino engine, matching
 # the intent name defined in your .rhn context file).
 commands:
-  - name: move_left
-    phrases: ["left", "go left", "move left"]
-    rhino_intent: moveLeft
-    key: left
-
-  - name: move_right
-    phrases: ["right", "go right", "move right"]
-    rhino_intent: moveRight
-    key: right
-
-  - name: jump
-    phrases: ["jump"]
-    rhino_intent: jump
-    key: space
-
-  - name: crouch
-    phrases: ["crouch", "duck"]
-    rhino_intent: crouch
-    key: ctrl_l
-
-  - name: stop
-    phrases: ["stop", "halt"]
-    rhino_intent: stop
-    key: s
+- name: move_left
+  phrases:
+  - left
+  - go left
+  - move left
+  rhino_intent: moveLeft
+  key: left
+- name: move_right
+  phrases:
+  - right
+  - go right
+  - move right
+  rhino_intent: moveRight
+  key: right
+- name: jump
+  phrases:
+  - jump
+  rhino_intent: jump
+  key: space
+- name: crouch
+  phrases:
+  - crouch
+  - duck
+  rhino_intent: crouch
+  key: ctrl_l
+- name: stop
+  phrases:
+  - stop
+  - halt
+  rhino_intent: stop
+  key: s
+- name: stop test
+  phrases:
+  - stop the dog now
+  key: q

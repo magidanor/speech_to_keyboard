@@ -55,8 +55,16 @@ class CommandMatcher:
             return command
 
         # Fall back to substring containment so e.g. "please go left now"
-        # still matches the "left" command.
+        # still matches the "left" command. Multiple phrases can contain
+        # each other (e.g. "stop" and "stop the dog now" both match "stop
+        # the dog") -- prefer the longest one since it's the most specific.
+        best_phrase = None
+        best_command = None
         for phrase, cmd in self._phrase_to_command.items():
-            if phrase and (phrase in normalized or normalized in phrase):
-                return cmd
-        return None
+            if not phrase:
+                continue
+            if phrase in normalized or normalized in phrase:
+                if best_phrase is None or len(phrase) > len(best_phrase):
+                    best_phrase = phrase
+                    best_command = cmd
+        return best_command

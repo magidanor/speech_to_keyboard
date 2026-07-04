@@ -4,6 +4,10 @@ vosk>=0.3.38
 pynput>=1.7.6
 pydirectinput>=1.0.4; platform_system == "Windows"
 
+# Command editor / phrase-tester web UI (commands_config.sh)
+flask>=2.3
+ruamel.yaml>=0.18
+
 # Optional: only needed if you set `engine: rhino` in config.yaml.
 # Requires a free Picovoice account + AccessKey (https://console.picovoice.ai).
 # pvrhino>=3.0.0

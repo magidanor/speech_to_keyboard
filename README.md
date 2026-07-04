@@ -28,11 +28,16 @@ src/
   input/keyboard.py          Cross-platform key press injection
   activation/modes.py        always_on / push_to_talk / wake_word strategies
   command_matcher.py         Maps recognized text/intent -> configured command
+  ui/server.py               Flask backend for the command editor / phrase tester
+  ui/static/index.html       Frontend for the command editor / phrase tester
 scripts/
   download_vosk_model.py     Fetches a Vosk model
   test_keyboard.py           Sanity-checks key injection without any audio
 tests/
   test_command_matcher.py    Unit tests for the matching logic
+setup.sh                     Creates .venv, installs deps, downloads the model
+run.sh                       Activates .venv and starts src/main.py
+commands_config.sh           Activates .venv and starts the web UI (src/ui/server.py)
 ```
 
 ## Setup
@@ -69,7 +74,7 @@ Focus your Unity game (or a text editor first, to sanity check) before the count
 Then run the full pipeline:
 
 ```bash
-python -m src.main --config config.yaml
+./run.sh
 ```
 
 ## Configuring commands
@@ -83,9 +88,25 @@ Each entry in `config.yaml`'s `commands:` list defines one voice command:
   key: left                                   # canonical key name (see below)
 ```
 
-You don't need both `phrases` and `rhino_intent` — only the field your active engine uses matters, but keeping both in sync makes switching engines painless.
+You don't need both `phrases` and `rhino_intent` — only the field your active engine uses matters, but keeping both in sync makes switching engines painless. Phrases can be longer sentences too, not just single words — e.g. `["under the tree", "go under the tree"]` — the grammar-constrained recognizer treats the whole phrase as one matchable unit.
 
 Canonical key names: `left right up down space enter esc tab shift_l shift_r ctrl_l ctrl_r alt_l alt_r`, plus single letters (`a`-`z`), digits (`0`-`9`), and `f1`-`f12`. These get translated to the right backend automatically (`pydirectinput` names on Windows, `pynput` names elsewhere).
+
+## Command editor / phrase tester (web UI)
+
+Instead of hand-editing `config.yaml`, run:
+
+```bash
+./commands_config.sh
+```
+
+and open `http://127.0.0.1:5000`. It gives you:
+
+- An editable table of commands (name, phrases, optional Rhino intent, key) with add/delete rows and a "Save to config.yaml" button. Saving preserves the comments and structure of the rest of the file.
+- A **typed-phrase tester**: type any phrase and see whether it matches one of your current (even unsaved) commands — useful for quickly checking phrase wording, including longer sentences like "under the tree" or "over the hill", without needing to speak.
+- A **spoken-phrase tester**: click "Record & test", speak into your mic for the configured window (default 6s), and see exactly what Vosk heard and whether it matched — the real end-to-end check, since typed-text matching can pass while the actual recognizer still mishears a longer phrase.
+
+The web UI always tests through the Vosk engine (even if `engine: rhino` is set in config.yaml), since Vosk can be pointed at any ad hoc phrase list on the fly — Rhino's intents are baked into a compiled context file, so testing new phrases against it requires retraining that context in the Picovoice Console instead.
 
 ## Activation modes
 
@@ -100,7 +121,7 @@ Set `activation.mode` in `config.yaml`:
 Every dispatched command logs a `recognition-to-dispatch` time in milliseconds — that's the gap between the engine finishing recognition and the key press firing (dispatch itself is typically sub-millisecond; this number is really telling you how the recognizer/activation mode is performing). Run with `-v` for partial-result debug logging too:
 
 ```bash
-python -m src.main -v
+./run.sh -v
 ```
 
 Things worth trying if latency feels high:

@@ -67,7 +67,6 @@ echo "Checking Vosk model..."
 python scripts/download_vosk_model.py
 
 echo ""
-echo "Setup complete. Activate the venv in future shells with:"
-echo "  source $ACTIVATE"
-echo "Then run:"
-echo "  python -m src.main"
+echo "Setup complete. Start the app with:"
+echo "  ./run.sh"
+echo "(that activates the venv for you; add -v for verbose logging, or --config <path> for a different config file)"
