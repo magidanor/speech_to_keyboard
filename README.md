@@ -6,7 +6,7 @@ Voice commands to keyboard input, for a closed set of game actions (left, right,
 
 ```bash
 ./setup.sh   # creates .venv, installs dependencies, downloads a Vosk model
-./app.sh     # opens http://127.0.0.1:5000 -- a Run tab and a Config tab
+./app.sh     # opens http://127.0.0.1:8765 -- a Run tab and a Config tab
 ```
 
 Before relying on speech, it's worth confirming key injection actually reaches your target window:
@@ -86,7 +86,7 @@ python scripts/download_vosk_model.py
 
 ## Using the app: Run + Config tabs
 
-`./app.sh` starts one web app at `http://127.0.0.1:5000` with two tabs — it's meant to feel like a single program, not two separate tools:
+`./app.sh` starts one web app at `http://127.0.0.1:8765` with two tabs — it's meant to feel like a single program, not two separate tools:
 
 **Run tab** (the actual product): a status indicator, Start/Stop buttons, a "Quit app" button, and a live activity log. Clicking Start runs the speech-to-keyboard pipeline — engine, activation mode, keyboard injection, everything from `config.yaml` — inside this same server process, in a background thread. Every dispatched command shows up in the activity log (`heard "..." -> command_name (key=..., Nms)`) as it happens. Stop shuts the pipeline down cleanly and releases the microphone; Quit closes the whole app (see [Running it with no terminal](#running-it-with-no-terminal) below for why that matters).
 
@@ -180,6 +180,22 @@ pytest tests/
 ```
 
 Tests run without a microphone, model, or OS-specific keyboard backend — they're pure logic tests, safe to run anywhere including CI.
+
+## Troubleshooting
+
+**Getting a 403 (or the page won't load) at `http://127.0.0.1:8765`.** Something else is very likely already listening on that port. The most common cause on macOS is AirPlay Receiver, which by default listens on port 5000 (that's specifically why this app defaults to 8765 instead) -- but any other local dev server, or a previous copy of this app that didn't shut down cleanly, can cause the same symptom on any port. To check:
+
+```bash
+lsof -nP -iTCP:8765 -sTCP:LISTEN
+```
+
+If that shows an unexpected process, either quit it or run this app on a different port instead: `./app.sh --port 8080` (and the same `--port` flag works with `./run.sh` or `python -m src.ui.server`). The double-click launchers currently assume the default port, so if you change it, launch via `./app.sh --port <N>` from a terminal instead of double-clicking.
+
+**Nothing happens when a command should fire.** Check the Run tab's activity log (or terminal output with `-v`) for a "Heard ... -> no command matched" style message versus no output at all -- the former means recognition is working but the phrase needs tuning (see the Config tab's testers); the latter means audio isn't reaching the recognizer at all (check mic permissions for your terminal/the app in System Settings, and that the right input device is selected as your system default mic).
+
+**Keys aren't registering in the game at all.** Run `python scripts/test_keyboard.py` with the game window focused to isolate whether it's an injection problem or a recognition problem.
+
+**Keys come out wrong under a non-US input language.** See [Keyboard layouts and non-US input](#keyboard-layouts-and-non-us-input) above.
 
 ## Next steps (not covered here)
 

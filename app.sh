@@ -4,7 +4,7 @@
 # Config tab (edit commands, test phrases) in one local web server.
 #
 # Usage:
-#   ./app.sh                       # http://127.0.0.1:5000
+#   ./app.sh                       # http://127.0.0.1:8765
 #   ./app.sh --port 8080
 #   ./app.sh --config other.yaml
 set -euo pipefail

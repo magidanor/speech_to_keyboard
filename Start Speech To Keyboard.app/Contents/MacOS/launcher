@@ -27,8 +27,8 @@ disown
 
 # Wait for the server to come up, then open it in the default browser.
 for i in $(seq 1 30); do
-  if curl -s -o /dev/null "http://127.0.0.1:5000"; then
-    open "http://127.0.0.1:5000"
+  if curl -s -o /dev/null "http://127.0.0.1:8765"; then
+    open "http://127.0.0.1:8765"
     exit 0
   fi
   sleep 1

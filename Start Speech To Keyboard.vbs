@@ -37,7 +37,7 @@ For i = 1 To 30
     On Error Resume Next
     Set http = Nothing
     Set http = CreateObject("MSXML2.XMLHTTP")
-    http.Open "GET", "http://127.0.0.1:5000/", False
+    http.Open "GET", "http://127.0.0.1:8765/", False
     http.Send
     If Err.Number = 0 And http.Status = 200 Then
         started = True
@@ -47,7 +47,7 @@ For i = 1 To 30
 Next
 
 If started Then
-    shell.Run "http://127.0.0.1:5000"
+    shell.Run "http://127.0.0.1:8765"
 Else
     MsgBox "The app did not start within 30 seconds." & vbCrLf & _
            "For error details, open a terminal (Git Bash or WSL) in this folder and run ./run.sh -v instead.", _

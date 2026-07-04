@@ -5,7 +5,7 @@ like "under the tree" -- against the live recognizer).
 
 Run with:
     python -m src.ui.server        # or just ./app.sh
-Then open http://127.0.0.1:5000
+Then open http://127.0.0.1:8765
 
 The Run tab starts src.main.run() in a background thread rather than
 shelling out to a second process, so start/stop and live activity logging
@@ -405,7 +405,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Speech-to-keyboard: run control + command editor web app.")
     parser.add_argument("--config", default="config.yaml")
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=5000)
+    parser.add_argument("--port", type=int, default=8765)
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Also log each HTTP request (noisy: the UI polls once a second)"
     )
