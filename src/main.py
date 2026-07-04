@@ -1,22 +1,30 @@
-"""Entry point: wires config -> engine -> activation mode -> keyboard.
+"""Core speech-to-keyboard pipeline: config -> engine -> activation mode ->
+keyboard. `run()` is the shared entry point into that pipeline, used both by
+the CLI below and by src/ui/server.py's Run tab, which executes it in a
+background thread with a stop_event so it can be started and stopped from
+the web app instead of a second process.
 
-Run with:
+CLI usage:
     python -m src.main --config config.yaml
 """
 import argparse
 import logging
 import sys
+import threading
 import time
+from typing import Callable, Optional
 
 from .activation.modes import AlwaysOnActivation, PushToTalkActivation, WakeWordActivation
 from .audio.capture import AudioCapture
 from .command_matcher import CommandMatcher
-from .config import AppConfig, load_config
+from .config import AppConfig, CommandConfig, load_config
 from .input.keyboard import KeyboardController
-from .recognition.base import RecognitionEngine
+from .recognition.base import RecognitionEngine, RecognitionResult
 from .recognition.vosk_engine import VoskEngine
 
 logger = logging.getLogger("main")
+
+OnCommandHook = Callable[[CommandConfig, RecognitionResult, float], None]
 
 
 def build_engine(config: AppConfig) -> RecognitionEngine:
@@ -50,18 +58,16 @@ def build_activation(config: AppConfig, engine, matcher, audio):
     raise ValueError(f"Unknown activation mode: {mode!r}")
 
 
-def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description="Speech-to-keyboard for closed-set voice commands.")
-    parser.add_argument("--config", default="config.yaml", help="Path to config.yaml")
-    parser.add_argument("-v", "--verbose", action="store_true", help="Enable debug logging")
-    args = parser.parse_args(argv)
-
-    logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    )
-
-    config = load_config(args.config)
+def run(
+    config_path: str = "config.yaml",
+    stop_event: Optional[threading.Event] = None,
+    on_command_hook: Optional[OnCommandHook] = None,
+) -> None:
+    """Runs the speech-to-keyboard pipeline until `stop_event` is set (or
+    forever, if no stop_event is given -- e.g. plain CLI usage, stopped with
+    Ctrl+C instead).
+    """
+    config = load_config(config_path)
     matcher = CommandMatcher(config.commands, cooldown_seconds=config.matching.cooldown_seconds)
     engine = build_engine(config)
 
@@ -85,6 +91,8 @@ def main(argv=None) -> int:
             command.key,
             dispatch_latency_ms,
         )
+        if on_command_hook is not None:
+            on_command_hook(command, result, dispatch_latency_ms)
 
     activation = build_activation(config, engine, matcher, audio)
 
@@ -92,12 +100,25 @@ def main(argv=None) -> int:
     logger.info("Commands: %s", {c.name: c.phrases for c in config.commands})
 
     try:
-        activation.run_forever(on_command)
+        activation.run_forever(on_command, stop_event=stop_event)
     except KeyboardInterrupt:
         logger.info("Shutting down.")
     finally:
         engine.close()
 
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description="Speech-to-keyboard for closed-set voice commands.")
+    parser.add_argument("--config", default="config.yaml", help="Path to config.yaml")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable debug logging")
+    args = parser.parse_args(argv)
+
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
+
+    run(config_path=args.config)
     return 0
 
 

@@ -1,18 +1,25 @@
-"""Local web UI for editing the closed-set command list and testing phrases
--- typed or spoken, including longer multi-word sentences like "under the
-tree" -- against the live recognizer, without hand-editing config.yaml or
-running the full src/main.py loop.
+"""Local web app: one program with a Run tab (start/stop the actual
+speech-to-keyboard pipeline) and a Config tab (edit the closed-set command
+list, test phrases -- typed or spoken, including longer multi-word sentences
+like "under the tree" -- against the live recognizer).
 
 Run with:
-    python -m src.ui.server        # or just ./commands_config.sh
+    python -m src.ui.server        # or just ./app.sh
 Then open http://127.0.0.1:5000
 
-Testing always uses the Vosk engine (regardless of `engine:` in config.yaml)
-since it can test arbitrary typed/spoken phrases against a grammar built on
-the fly -- Rhino's intents are fixed at context-compile time, so it can't be
-probed with ad hoc phrases the same way.
+The Run tab starts src.main.run() in a background thread rather than
+shelling out to a second process, so start/stop and live activity logging
+are just API calls against this same server.
+
+Phrase testing always uses the Vosk engine (regardless of `engine:` in
+config.yaml) since it can test arbitrary typed/spoken phrases against a
+grammar built on the fly -- Rhino's intents are fixed at context-compile
+time, so it can't be probed with ad hoc phrases the same way. Testing and
+the live Run pipeline both need exclusive access to the microphone, so only
+one of them can be active at a time (enforced server-side).
 """
 import argparse
+import collections
 import logging
 import queue
 import threading
@@ -26,6 +33,7 @@ from ruamel.yaml import YAML
 from ..audio.capture import AudioCapture
 from ..command_matcher import CommandMatcher
 from ..config import CommandConfig, load_config
+from ..main import run as run_pipeline
 from ..recognition.base import RecognitionResult
 from ..recognition.vosk_engine import VoskEngine
 
@@ -40,8 +48,14 @@ _yaml.preserve_quotes = True
 
 _state: Dict[str, Any] = {
     "config_path": "config.yaml",
-    "engine": None,  # VoskEngine, created in create_app()
-    "test_lock": threading.Lock(),
+    "engine": None,  # VoskEngine used for testing, created in create_app()
+    "mic_owner": None,  # None | "test" | "run" -- who currently holds the mic
+    "mic_owner_lock": threading.Lock(),
+    "run_thread": None,
+    "run_stop_event": None,
+    "run_status": "stopped",  # "stopped" | "running" | "stopping"
+    "run_error": None,
+    "run_log": collections.deque(maxlen=200),
 }
 
 
@@ -117,6 +131,34 @@ def _commands_from_payload(payload: Dict[str, Any]) -> List[CommandConfig]:
     return load_config(str(_config_path())).commands
 
 
+# --- Microphone arbitration -------------------------------------------------
+# The phrase tester and the live Run pipeline both need the mic; only one may
+# hold it at a time.
+
+
+def _try_claim_mic(owner: str) -> bool:
+    with _state["mic_owner_lock"]:
+        if _state["mic_owner"] is not None:
+            return False
+        _state["mic_owner"] = owner
+        return True
+
+
+def _release_mic(owner: str) -> None:
+    with _state["mic_owner_lock"]:
+        if _state["mic_owner"] == owner:
+            _state["mic_owner"] = None
+
+
+def _mic_busy_message() -> str:
+    owner = _state["mic_owner"]
+    if owner == "run":
+        return "Recognition is currently running -- stop it first."
+    if owner == "test":
+        return "A phrase test is already in progress."
+    return "The microphone is in use."
+
+
 @app.get("/")
 def index():
     return send_from_directory(STATIC_DIR, "index.html")
@@ -129,6 +171,7 @@ def get_commands():
         {
             "commands": [_command_to_dict(c) for c in config.commands],
             "engine": config.engine,
+            "activation_mode": config.activation.mode,
             "vosk_model_path": config.vosk.model_path,
         }
     )
@@ -199,9 +242,8 @@ def test_audio():
     if engine is None:
         return jsonify({"error": "Vosk engine is not loaded on the server"}), 500
 
-    lock: threading.Lock = _state["test_lock"]
-    if not lock.acquire(blocking=False):
-        return jsonify({"error": "A test is already in progress"}), 409
+    if not _try_claim_mic("test"):
+        return jsonify({"error": _mic_busy_message()}), 409
 
     try:
         matcher = CommandMatcher(commands, cooldown_seconds=0.0)
@@ -247,7 +289,82 @@ def test_audio():
         # draft test doesn't leave the shared engine out of sync.
         saved_matcher = CommandMatcher(load_config(str(_config_path())).commands)
         engine.set_active_grammar(saved_matcher.all_phrases())
-        lock.release()
+        _release_mic("test")
+
+
+# --- Run control: starts/stops the actual voice-to-keyboard pipeline -------
+
+
+def _run_target(config_path: str, stop_event: threading.Event) -> None:
+    def hook(command, result, latency_ms):
+        heard = result.text or result.intent
+        _state["run_log"].append(
+            f"{time.strftime('%H:%M:%S')}  heard {heard!r} -> {command.name} "
+            f"(key={command.key}, {latency_ms:.0f}ms)"
+        )
+
+    try:
+        run_pipeline(config_path=config_path, stop_event=stop_event, on_command_hook=hook)
+    except Exception as exc:
+        logger.exception("Voice pipeline crashed")
+        _state["run_error"] = str(exc)
+    finally:
+        _state["run_status"] = "stopped"
+        _release_mic("run")
+
+
+@app.post("/api/run/start")
+def start_run():
+    if _state["run_status"] == "running":
+        return jsonify({"error": "Already running"}), 409
+    if not _try_claim_mic("run"):
+        return jsonify({"error": _mic_busy_message()}), 409
+
+    try:
+        # Fail fast on an obviously broken config before spinning up the
+        # thread (e.g. bad engine name, missing Rhino context path).
+        load_config(_state["config_path"])
+    except Exception as exc:
+        _release_mic("run")
+        return jsonify({"error": f"Invalid config.yaml: {exc}"}), 400
+
+    _state["run_error"] = None
+    _state["run_log"].clear()
+    stop_event = threading.Event()
+    _state["run_stop_event"] = stop_event
+
+    thread = threading.Thread(
+        target=_run_target, args=(_state["config_path"], stop_event), daemon=True
+    )
+    _state["run_thread"] = thread
+    _state["run_status"] = "running"
+    thread.start()
+    return jsonify({"ok": True})
+
+
+@app.post("/api/run/stop")
+def stop_run():
+    if _state["run_status"] not in ("running", "stopping"):
+        return jsonify({"error": "Not running"}), 409
+    stop_event: Optional[threading.Event] = _state.get("run_stop_event")
+    if stop_event is not None:
+        stop_event.set()
+    _state["run_status"] = "stopping"
+    return jsonify({"ok": True})
+
+
+@app.get("/api/run/status")
+def run_status():
+    thread: Optional[threading.Thread] = _state.get("run_thread")
+    if thread is not None and not thread.is_alive() and _state["run_status"] in ("running", "stopping"):
+        _state["run_status"] = "stopped"
+    return jsonify(
+        {
+            "status": _state["run_status"],
+            "log": list(_state["run_log"])[-50:],
+            "error": _state["run_error"],
+        }
+    )
 
 
 def create_app(config_path: str = "config.yaml") -> Flask:
@@ -263,7 +380,7 @@ def create_app(config_path: str = "config.yaml") -> Flask:
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description="Web UI for editing/testing voice commands.")
+    parser = argparse.ArgumentParser(description="Speech-to-keyboard: run control + command editor web app.")
     parser.add_argument("--config", default="config.yaml")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=5000)
@@ -272,7 +389,11 @@ def main(argv=None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
     create_app(args.config)
     print(f"Open http://{args.host}:{args.port} in your browser.")
-    app.run(host=args.host, port=args.port, debug=False, threaded=False)
+    # threaded=True: status polling and other API calls shouldn't block behind
+    # a long-running phrase test or the live Run pipeline (which runs in its
+    # own background thread, not a Flask request thread, but status/stop
+    # requests still need to be served promptly while it's active).
+    app.run(host=args.host, port=args.port, debug=False, threaded=True)
     return 0
 
 

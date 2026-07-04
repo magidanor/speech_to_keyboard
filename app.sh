@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Activates the venv (must already exist -- run ./setup.sh first) and starts
-# the local command-editor / phrase-tester web UI.
+# the app: a Run tab (start/stop the speech-to-keyboard pipeline) and a
+# Config tab (edit commands, test phrases) in one local web server.
 #
 # Usage:
-#   ./commands_config.sh                       # http://127.0.0.1:5000
-#   ./commands_config.sh --port 8080
-#   ./commands_config.sh --config other.yaml
+#   ./app.sh                       # http://127.0.0.1:5000
+#   ./app.sh --port 8080
+#   ./app.sh --config other.yaml
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

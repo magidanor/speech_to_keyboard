@@ -2,7 +2,22 @@
 
 Voice commands to keyboard input, for a closed set of game actions (left, right, jump, etc). This covers only the speech-to-keyboard piece — no Unity integration. The game just needs to read normal keyboard input; as far as it's concerned, a keypress is a keypress.
 
-## Why not Whisper
+## Quick start
+
+```bash
+./setup.sh   # creates .venv, installs dependencies, downloads a Vosk model
+./app.sh     # opens http://127.0.0.1:5000 -- a Run tab and a Config tab
+```
+
+Before relying on speech, it's worth confirming key injection actually reaches your target window:
+
+```bash
+python scripts/test_keyboard.py
+```
+
+Focus your Unity game (or a text editor first, to sanity check) before the countdown finishes.
+
+## How it works
 
 Whisper (and whisper.cpp) is built for accurate, open-vocabulary transcription of full sentences, generally processed in a few-second chunks. That's the wrong tool for this job: the vocabulary here is a handful of fixed commands, and every extra millisecond of latency matters. Constraining a model to a known set of outcomes is both faster and more accurate than transcribing freely and then string-matching the result.
 
@@ -11,7 +26,7 @@ Two engines fit this problem well:
 - **Vosk** — free, open-source, fully offline. You can pass it a JSON grammar (a list of allowed phrases) instead of an open vocabulary, which makes decoding faster and cuts down on misrecognitions. This is what the project uses by default.
 - **Picovoice Rhino** — a "speech-to-intent" engine that skips transcription entirely and maps audio straight to an intent (e.g. `moveLeft`). Single end-to-end model instead of a transcribe-then-parse pipeline, so it's typically even lower latency and more accurate for a small fixed command set. Requires a free Picovoice account and training your own context file at [console.picovoice.ai](https://console.picovoice.ai).
 
-Both are implemented behind a common interface (`src/recognition/base.py`) so you can switch by changing one line in `config.yaml`. Start with Vosk since it works out of the box with no account; move to Rhino later if you want to push latency/accuracy further.
+Both are implemented behind a common interface (`src/recognition/base.py`) so switching is a one-line change in `config.yaml`. Start with Vosk since it works out of the box with no account; move to Rhino later if you want to push latency/accuracy further.
 
 ## Project layout
 
@@ -19,34 +34,35 @@ Both are implemented behind a common interface (`src/recognition/base.py`) so yo
 config.yaml                  All settings: engine, activation mode, key bindings, commands
 src/
   config.py                  Loads config.yaml into dataclasses
-  main.py                    Entry point, wires everything together
+  main.py                    run() / build_engine() / build_activation() -- the core pipeline
   audio/capture.py           Microphone streaming (sounddevice)
   recognition/
     base.py                  RecognitionEngine interface + RecognitionResult
     vosk_engine.py            Grammar-constrained Vosk implementation
     rhino_engine.py           Picovoice Rhino implementation (optional)
   input/keyboard.py          Cross-platform key press injection
-  activation/modes.py        always_on / push_to_talk / wake_word strategies
+  activation/modes.py        always_on / push_to_talk / wake_word strategies (stop_event-aware)
   command_matcher.py         Maps recognized text/intent -> configured command
-  ui/server.py               Flask backend for the command editor / phrase tester
-  ui/static/index.html       Frontend for the command editor / phrase tester
+  ui/server.py               Flask app: Run tab (start/stop src.main.run()) + Config tab (editor/tester)
+  ui/static/index.html       Frontend for the Run + Config tabs
 scripts/
   download_vosk_model.py     Fetches a Vosk model
   test_keyboard.py           Sanity-checks key injection without any audio
 tests/
   test_command_matcher.py    Unit tests for the matching logic
+  test_ui_validation.py      Unit tests for the command-editor's server-side validation
 setup.sh                     Creates .venv, installs deps, downloads the model
-run.sh                       Activates .venv and starts src/main.py
-commands_config.sh           Activates .venv and starts the web UI (src/ui/server.py)
+app.sh                       Activates .venv and starts the app (Run + Config tabs) -- main entry point
+run.sh                       Activates .venv and runs the pipeline headless, no UI (CLI-only alternative)
 ```
 
-## Setup
+## Setup, in detail
 
 ```bash
 ./setup.sh
 ```
 
-This creates a `.venv/` virtual environment if one doesn't already exist, installs `requirements.txt` into it, and downloads `vosk-model-small-en-us-0.15` (~40MB) into `models/` (skipped if already present). Run `./setup.sh --dev` instead to also install `requirements-dev.txt` (adds pytest). Re-running `./setup.sh` any time is safe -- it's idempotent.
+Creates a `.venv/` virtual environment if one doesn't already exist, installs `requirements.txt` into it, and downloads `vosk-model-small-en-us-0.15` (~40MB) into `models/` (skipped if already present). Run `./setup.sh --dev` instead to also install `requirements-dev.txt` (adds pytest). Re-running `./setup.sh` any time is safe -- it's idempotent.
 
 Activate the environment in new shells with:
 
@@ -63,23 +79,27 @@ pip install -r requirements.txt
 python scripts/download_vosk_model.py
 ```
 
-Before wiring up speech, confirm key injection actually reaches your target window:
+## Using the app: Run + Config tabs
 
-```bash
-python scripts/test_keyboard.py
-```
+`./app.sh` starts one web app at `http://127.0.0.1:5000` with two tabs — it's meant to feel like a single program, not two separate tools:
 
-Focus your Unity game (or a text editor first, to sanity check) before the countdown finishes.
+**Run tab** (the actual product): a status indicator, Start/Stop buttons, and a live activity log. Clicking Start runs the speech-to-keyboard pipeline — engine, activation mode, keyboard injection, everything from `config.yaml` — inside this same server process, in a background thread. Every dispatched command shows up in the activity log (`heard "..." -> command_name (key=..., Nms)`) as it happens. Stop shuts it down cleanly and releases the microphone.
 
-Then run the full pipeline:
+**Config tab** (the settings/design surface):
 
-```bash
-./run.sh
-```
+- An editable table of commands (name, phrases, optional Rhino intent, key) with add/delete rows and a "Save to config.yaml" button. Saving preserves the comments and structure of the rest of the file.
+- A **typed-phrase tester**: type any phrase and see whether it matches one of your current (even unsaved) commands — useful for quickly checking phrase wording, including longer sentences like "under the tree" or "over the hill", without needing to speak.
+- A **spoken-phrase tester**: click "Record & test", speak into your mic for the configured window (default 6s), and see exactly what Vosk heard and whether it matched — the real end-to-end check, since typed-text matching can pass while the actual recognizer still mishears a longer phrase.
+
+The Run pipeline and the spoken-phrase tester both need exclusive access to the microphone, so only one can be active at a time — starting one while the other is busy returns a clear "in use" message instead of a confusing crash. The typed-phrase tester doesn't touch the mic, so it always works, even while Run is active.
+
+Phrase testing always goes through the Vosk engine (even if `engine: rhino` is set in config.yaml for the actual Run pipeline), since Vosk can be pointed at any ad hoc phrase list on the fly — Rhino's intents are baked into a compiled context file, so testing new phrases against it requires retraining that context in the Picovoice Console instead.
+
+Prefer a plain terminal with no web UI? `./run.sh` runs the identical pipeline headless — the web app's Run tab is just a thin control layer on top of the same `src/main.py` code.
 
 ## Configuring commands
 
-Each entry in `config.yaml`'s `commands:` list defines one voice command:
+Each entry in `config.yaml`'s `commands:` list defines one voice command (editable via the Config tab, or by hand):
 
 ```yaml
 - name: move_left
@@ -88,25 +108,9 @@ Each entry in `config.yaml`'s `commands:` list defines one voice command:
   key: left                                   # canonical key name (see below)
 ```
 
-You don't need both `phrases` and `rhino_intent` — only the field your active engine uses matters, but keeping both in sync makes switching engines painless. Phrases can be longer sentences too, not just single words — e.g. `["under the tree", "go under the tree"]` — the grammar-constrained recognizer treats the whole phrase as one matchable unit.
+You don't need both `phrases` and `rhino_intent` — only the field your active engine uses matters, but keeping both in sync makes switching engines painless. Phrases can be longer sentences too, not just single words — e.g. `["under the tree", "go under the tree"]` — the grammar-constrained recognizer treats the whole phrase as one matchable unit. If a heard phrase could match more than one command (e.g. "stop" and "stop the music" both match "please stop the music"), the longest, most specific phrase wins.
 
 Canonical key names: `left right up down space enter esc tab shift_l shift_r ctrl_l ctrl_r alt_l alt_r`, plus single letters (`a`-`z`), digits (`0`-`9`), and `f1`-`f12`. These get translated to the right backend automatically (`pydirectinput` names on Windows, `pynput` names elsewhere).
-
-## Command editor / phrase tester (web UI)
-
-Instead of hand-editing `config.yaml`, run:
-
-```bash
-./commands_config.sh
-```
-
-and open `http://127.0.0.1:5000`. It gives you:
-
-- An editable table of commands (name, phrases, optional Rhino intent, key) with add/delete rows and a "Save to config.yaml" button. Saving preserves the comments and structure of the rest of the file.
-- A **typed-phrase tester**: type any phrase and see whether it matches one of your current (even unsaved) commands — useful for quickly checking phrase wording, including longer sentences like "under the tree" or "over the hill", without needing to speak.
-- A **spoken-phrase tester**: click "Record & test", speak into your mic for the configured window (default 6s), and see exactly what Vosk heard and whether it matched — the real end-to-end check, since typed-text matching can pass while the actual recognizer still mishears a longer phrase.
-
-The web UI always tests through the Vosk engine (even if `engine: rhino` is set in config.yaml), since Vosk can be pointed at any ad hoc phrase list on the fly — Rhino's intents are baked into a compiled context file, so testing new phrases against it requires retraining that context in the Picovoice Console instead.
 
 ## Activation modes
 
@@ -118,7 +122,7 @@ Set `activation.mode` in `config.yaml`:
 
 ## Latency tuning
 
-Every dispatched command logs a `recognition-to-dispatch` time in milliseconds — that's the gap between the engine finishing recognition and the key press firing (dispatch itself is typically sub-millisecond; this number is really telling you how the recognizer/activation mode is performing). Run with `-v` for partial-result debug logging too:
+Every dispatched command logs a recognition-to-dispatch time in milliseconds — that's the gap between the engine finishing recognition and the key press firing (dispatch itself is typically sub-millisecond; this number is really telling you how the recognizer/activation mode is performing). The Run tab's activity log shows this per command too. For partial-result debug logging (terminal only), run headless with `-v`:
 
 ```bash
 ./run.sh -v
@@ -147,7 +151,7 @@ pip install -r requirements-dev.txt
 pytest tests/
 ```
 
-The command-matching tests run without a microphone, model, or OS-specific keyboard backend — they're pure logic tests, safe to run anywhere including CI.
+Tests run without a microphone, model, or OS-specific keyboard backend — they're pure logic tests, safe to run anywhere including CI.
 
 ## Next steps (not covered here)
 

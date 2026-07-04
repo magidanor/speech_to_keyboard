@@ -9,8 +9,15 @@
 - WakeWordActivation: listens for a wake word with a tiny grammar, then
   temporarily switches to the full command grammar. Currently requires an
   engine that supports `set_active_grammar` (VoskEngine).
+
+All three accept an optional `stop_event` in `run_forever()` so a caller
+(e.g. the web UI, running this in a background thread) can ask the loop to
+exit cleanly -- each polls the mic with a short timeout instead of blocking
+forever so the stop request is noticed promptly.
 """
 import logging
+import queue
+import threading
 import time
 from typing import Callable, Optional
 
@@ -22,6 +29,13 @@ from ..recognition.base import RecognitionEngine, RecognitionResult
 logger = logging.getLogger(__name__)
 
 OnCommand = Callable[[CommandConfig, RecognitionResult], None]
+
+# How often the mic-read loops wake up to check for a stop request.
+_POLL_INTERVAL = 0.5
+
+
+def _should_stop(stop_event: Optional[threading.Event]) -> bool:
+    return stop_event is not None and stop_event.is_set()
 
 
 def _dispatch(result: Optional[RecognitionResult], matcher: CommandMatcher, on_command: OnCommand) -> None:
@@ -40,12 +54,15 @@ class AlwaysOnActivation:
         self._matcher = matcher
         self._audio = audio
 
-    def run_forever(self, on_command: OnCommand) -> None:
+    def run_forever(self, on_command: OnCommand, stop_event: Optional[threading.Event] = None) -> None:
         buffer = bytearray()
         frame_bytes = self._engine.preferred_frame_bytes
         with self._audio:
-            while True:
-                buffer.extend(self._audio.read())
+            while not _should_stop(stop_event):
+                try:
+                    buffer.extend(self._audio.read(timeout=_POLL_INTERVAL))
+                except queue.Empty:
+                    continue
                 while len(buffer) >= frame_bytes:
                     frame, buffer = bytes(buffer[:frame_bytes]), buffer[frame_bytes:]
                     result = self._engine.feed_audio(frame)
@@ -66,7 +83,7 @@ class PushToTalkActivation:
         self._hotkey = hotkey
         self._listening = False
 
-    def run_forever(self, on_command: OnCommand) -> None:
+    def run_forever(self, on_command: OnCommand, stop_event: Optional[threading.Event] = None) -> None:
         from pynput import keyboard as pynput_keyboard
 
         target_key = self._resolve_key(pynput_keyboard, self._hotkey)
@@ -89,16 +106,22 @@ class PushToTalkActivation:
         listener = pynput_keyboard.Listener(on_press=on_press, on_release=on_release)
         listener.start()
 
-        with self._audio:
-            while True:
-                chunk = self._audio.read()
-                if not self._listening:
-                    continue
-                buffer.extend(chunk)
-                while len(buffer) >= frame_bytes:
-                    frame, buffer = bytes(buffer[:frame_bytes]), buffer[frame_bytes:]
-                    result = self._engine.feed_audio(frame)
-                    _dispatch(result, self._matcher, on_command)
+        try:
+            with self._audio:
+                while not _should_stop(stop_event):
+                    try:
+                        chunk = self._audio.read(timeout=_POLL_INTERVAL)
+                    except queue.Empty:
+                        continue
+                    if not self._listening:
+                        continue
+                    buffer.extend(chunk)
+                    while len(buffer) >= frame_bytes:
+                        frame, buffer = bytes(buffer[:frame_bytes]), buffer[frame_bytes:]
+                        result = self._engine.feed_audio(frame)
+                        _dispatch(result, self._matcher, on_command)
+        finally:
+            listener.stop()
 
     @staticmethod
     def _resolve_key(pynput_keyboard, name: str):
@@ -129,14 +152,17 @@ class WakeWordActivation:
         self._wake_window = wake_window_seconds
         self._command_phrases = matcher.all_phrases()
 
-    def run_forever(self, on_command: OnCommand) -> None:
+    def run_forever(self, on_command: OnCommand, stop_event: Optional[threading.Event] = None) -> None:
         buffer = bytearray()
         self._engine.set_active_grammar([self._wake_word])
         listening_for_command_until = 0.0
 
         with self._audio:
-            while True:
-                buffer.extend(self._audio.read())
+            while not _should_stop(stop_event):
+                try:
+                    buffer.extend(self._audio.read(timeout=_POLL_INTERVAL))
+                except queue.Empty:
+                    continue
                 frame_bytes = self._engine.preferred_frame_bytes
                 while len(buffer) >= frame_bytes:
                     frame, buffer = bytes(buffer[:frame_bytes]), buffer[frame_bytes:]

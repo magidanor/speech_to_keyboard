@@ -67,15 +67,15 @@ def test_all_phrases_returns_normalized_list():
 
 
 def test_overlapping_phrases_prefer_the_longest_match():
-    # "stop" and "stop the dog now" both contain-match "stop the dog" --
-    # the longer, more specific phrase should win.
+    # "stop" and "stop the music" both contain-match "please stop the music"
+    # -- the longer, more specific phrase should win.
     commands = [
         CommandConfig(name="stop", key="s", phrases=["stop", "halt"]),
-        CommandConfig(name="stop_test", key="q", phrases=["stop the dog now"]),
+        CommandConfig(name="stop_music", key="m", phrases=["stop the music"]),
     ]
     matcher = CommandMatcher(commands, cooldown_seconds=0.0)
-    command = matcher.match(RecognitionResult(is_final=True, text="stop the dog"))
-    assert command is not None and command.name == "stop_test"
+    command = matcher.match(RecognitionResult(is_final=True, text="please stop the music"))
+    assert command is not None and command.name == "stop_music"
 
     # Plain "stop" with nothing else should still hit the shorter command.
     matcher2 = CommandMatcher(commands, cooldown_seconds=0.0)

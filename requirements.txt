@@ -4,7 +4,7 @@ vosk>=0.3.38
 pynput>=1.7.6
 pydirectinput>=1.0.4; platform_system == "Windows"
 
-# Command editor / phrase-tester web UI (commands_config.sh)
+# Web app: run control + command editor (app.sh)
 flask>=2.3
 ruamel.yaml>=0.18
 

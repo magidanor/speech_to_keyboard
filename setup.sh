@@ -68,5 +68,7 @@ python scripts/download_vosk_model.py
 
 echo ""
 echo "Setup complete. Start the app with:"
-echo "  ./run.sh"
-echo "(that activates the venv for you; add -v for verbose logging, or --config <path> for a different config file)"
+echo "  ./app.sh"
+echo "(opens http://127.0.0.1:5000 with a Run tab and a Config tab -- activates the venv for you)"
+echo ""
+echo "Prefer a headless terminal with no web UI? Use ./run.sh instead (add -v for verbose logging, or --config <path> for a different config file)."
