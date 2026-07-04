@@ -1,0 +1,54 @@
+# Speech-to-keyboard configuration.
+# See README.md for a full explanation of each section.
+
+engine: vosk # vosk | rhino
+
+vosk:
+  model_path: models/vosk-model-small-en-us-0.15
+  sample_rate: 16000
+
+rhino:
+  # Only used when engine: rhino. Get a free AccessKey at https://console.picovoice.ai
+  access_key: ""
+  # Path to a .rhn context file you train on the Picovoice Console for your command set.
+  context_path: ""
+  sensitivity: 0.5
+
+activation:
+  mode: always_on # push_to_talk | always_on | wake_word
+  push_to_talk_key: ctrl_r # only used for push_to_talk mode
+  wake_word: computer # only used for wake_word mode
+  wake_window_seconds: 4.0 # only used for wake_word mode
+
+matching:
+  cooldown_seconds: 0.3 # ignore repeat commands fired within this window
+  key_press_duration: 0.05 # how long the simulated key is held down, in seconds
+
+# Closed set of voice commands. Each command needs at least one phrase (for
+# the Vosk engine) and/or a rhino_intent name (for the Rhino engine, matching
+# the intent name defined in your .rhn context file).
+commands:
+  - name: move_left
+    phrases: ["left", "go left", "move left"]
+    rhino_intent: moveLeft
+    key: left
+
+  - name: move_right
+    phrases: ["right", "go right", "move right"]
+    rhino_intent: moveRight
+    key: right
+
+  - name: jump
+    phrases: ["jump"]
+    rhino_intent: jump
+    key: space
+
+  - name: crouch
+    phrases: ["crouch", "duck"]
+    rhino_intent: crouch
+    key: ctrl_l
+
+  - name: stop
+    phrases: ["stop", "halt"]
+    rhino_intent: stop
+    key: s

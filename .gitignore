@@ -1,0 +1,13 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+.DS_Store
+
+# Downloaded speech models are large; fetch them with scripts/download_vosk_model.py
+models/*
+!models/.gitkeep
+
+.env

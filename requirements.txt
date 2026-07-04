@@ -1,0 +1,9 @@
+pyyaml>=6.0
+sounddevice>=0.4.6
+vosk>=0.3.38
+pynput>=1.7.6
+pydirectinput>=1.0.4; platform_system == "Windows"
+
+# Optional: only needed if you set `engine: rhino` in config.yaml.
+# Requires a free Picovoice account + AccessKey (https://console.picovoice.ai).
+# pvrhino>=3.0.0
