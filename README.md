@@ -1,34 +1,91 @@
 # speech_to_text
 
-Voice commands to keyboard input, for a closed set of game actions (left, right, jump, etc). This covers only the speech-to-keyboard piece — no Unity integration. The game just needs to read normal keyboard input; as far as it's concerned, a keypress is a keypress.
+Turns spoken commands into keyboard key presses. Say "jump" or "under the tree" and the matching key gets pressed in whatever window is focused - built for controlling a game (e.g. a Unity game) by voice, using a fixed set of recognized commands rather than open-ended dictation.
 
-## Quick start
+## Getting started
+
+### Prerequisites
+
+- **Python 3.9 or newer.** Check with `python3 --version` (macOS/Linux) or `python --version` (Windows) in a terminal. If it's missing or too old, download it from [python.org/downloads](https://www.python.org/downloads/) (on Windows, tick "Add python.exe to PATH" during install).
+- **A working microphone**, and an internet connection the first time it starts (to install dependencies and download the ~40MB speech model - no internet is needed after that).
+
+### 1. Start the app
+
+Double-click:
+
+- **macOS**: `Start Speech To Keyboard.app`
+- **Windows**: `Start Speech To Keyboard.vbs`
+
+No terminal or console window opens for regular use. The very first time, it'll notice setup hasn't been done yet and offer to do it (a window opens just for that one-time step, showing progress); after that, every double-click just opens straight to the app in your browser.
+
+<details>
+<summary>Prefer to run setup yourself instead of being prompted? (optional)</summary>
+
+This is exactly what the launcher above does automatically on first run, if you'd rather do it directly:
+
+- **macOS/Linux**: open a terminal in this folder and run `./setup.sh`.
+- **Windows**: double-click `setup.bat` (a window opens showing progress - press Enter when it says "Setup complete").
+
+Either way, this creates a self-contained environment, installs everything the app needs, and downloads the speech recognition model. It's safe to run again later (e.g. after an update) - it skips anything already done.
+
+</details>
+
+### 2. The Run tab
+
+This is where recognition actually happens.
+
+- **Start** turns on voice recognition. Say one of the configured commands and the matching key gets pressed.
+- **Stop** turns it off again, without closing the app.
+- **Quit app** closes the whole app. Since there's no window or terminal to close otherwise, this is the intended way to shut it down.
+- The **activity log** shows each command as it's recognized, so you can see it's working.
+
+### 3. The Config tab
+
+This is where the list of voice commands lives.
+
+- Each row is one command: a **name**, one or more **phrases** that trigger it, and the **key** it presses.
+- **+ Add command** adds a row; the **x** button removes one; **Save to config.yaml** saves your changes.
+- **Test a typed phrase** checks whether a phrase matches a command, without needing to speak.
+- **Test by speaking** actually listens through the microphone for a few seconds and shows what it heard and whether it matched - the most reliable way to check a phrase will really work in practice.
+
+## Troubleshooting
+
+**Getting a 403, or the page won't load, when the app starts.** Something else is very likely already listening on the same port. The most common cause on macOS is AirPlay Receiver, which by default listens on port 5000 (which is specifically why this app uses port 8765 instead) - but any other local dev server, or a previous copy of this app that didn't shut down cleanly, can cause the same symptom. To check:
 
 ```bash
-./setup.sh   # creates .venv, installs dependencies, downloads a Vosk model
-./app.sh     # opens http://127.0.0.1:8765 -- a Run tab and a Config tab
+lsof -nP -iTCP:8765 -sTCP:LISTEN
 ```
 
-Before relying on speech, it's worth confirming key injection actually reaches your target window:
+If that shows an unexpected process, quit it, or run this app on a different port instead: `./app.sh --port 8080` (note: the double-click launchers assume the default port, so after changing it, start the app from a terminal instead).
+
+**Nothing happens when a command should fire.** Check the Run tab's activity log for a "heard ... but no command matched" message versus nothing at all - the former means recognition is working but the phrase needs tuning (use the Config tab's testers); the latter usually means audio isn't reaching the app at all (check microphone permissions, and that the right input device is selected as the system's default mic).
+
+**Keys aren't registering in the target window/game at all.** Run `python scripts/test_keyboard.py` from a terminal with that window focused, to check whether it's a key-injection problem or a recognition problem.
+
+**Keys come out wrong when a non-English keyboard layout is active** (e.g. Hebrew). See [Keyboard layouts and non-US input](#keyboard-layouts-and-non-us-input) below.
+
+**The app won't close, or Quit doesn't seem to work.** It can be force-closed like any other stuck process: Activity Monitor on macOS, Task Manager on Windows - look for `python` or `pythonw`.
+
+## Running from a terminal instead
+
+Everything above also works as plain command-line tools, useful for development or for running headless. These are bash scripts - macOS/Linux have a compatible shell built in; on Windows, use Git Bash/WSL if you have it, or run `.venv\Scripts\python.exe -m src.ui.server` / `-m src.main` directly instead:
 
 ```bash
-python scripts/test_keyboard.py
+./app.sh              # same app as the double-click launchers, at http://127.0.0.1:8765
+./app.sh --port 8080  # on a different port
+./app.sh --config other.yaml
+./run.sh               # the Run tab's pipeline only, no web UI, stop with Ctrl+C
+./run.sh -v             # verbose logging
 ```
 
-Focus your Unity game (or a text editor first, to sanity check) before the countdown finishes.
+Setup by hand, without `./setup.sh`, also works:
 
-Setting this up for someone non-technical? See [Running it with no terminal](#running-it-with-no-terminal) -- `./setup.sh` still needs to be run once from a terminal, but after that they can just double-click a launcher.
-
-## How it works
-
-Whisper (and whisper.cpp) is built for accurate, open-vocabulary transcription of full sentences, generally processed in a few-second chunks. That's the wrong tool for this job: the vocabulary here is a handful of fixed commands, and every extra millisecond of latency matters. Constraining a model to a known set of outcomes is both faster and more accurate than transcribing freely and then string-matching the result.
-
-Two engines fit this problem well:
-
-- **Vosk** — free, open-source, fully offline. You can pass it a JSON grammar (a list of allowed phrases) instead of an open vocabulary, which makes decoding faster and cuts down on misrecognitions. This is what the project uses by default.
-- **Picovoice Rhino** — a "speech-to-intent" engine that skips transcription entirely and maps audio straight to an intent (e.g. `moveLeft`). Single end-to-end model instead of a transcribe-then-parse pipeline, so it's typically even lower latency and more accurate for a small fixed command set. Requires a free Picovoice account and training your own context file at [console.picovoice.ai](https://console.picovoice.ai).
-
-Both are implemented behind a common interface (`src/recognition/base.py`) so switching is a one-line change in `config.yaml`. Start with Vosk since it works out of the box with no account; move to Rhino later if you want to push latency/accuracy further.
+```bash
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+python scripts/download_vosk_model.py
+```
 
 ## Project layout
 
@@ -36,7 +93,7 @@ Both are implemented behind a common interface (`src/recognition/base.py`) so sw
 config.yaml                  All settings: engine, activation mode, key bindings, commands
 src/
   config.py                  Loads config.yaml into dataclasses
-  main.py                    run() / build_engine() / build_activation() -- the core pipeline
+  main.py                    run() / build_engine() / build_activation() - the core pipeline
   audio/capture.py           Microphone streaming (sounddevice)
   recognition/
     base.py                  RecognitionEngine interface + RecognitionResult
@@ -54,66 +111,13 @@ scripts/
 tests/
   test_command_matcher.py    Unit tests for the matching logic
   test_ui_validation.py      Unit tests for the command-editor's server-side validation
-setup.sh                     Creates .venv, installs deps, downloads the model
-app.sh                       Activates .venv and starts the app (Run + Config tabs) -- main entry point
-run.sh                       Activates .venv and runs the pipeline headless, no UI (CLI-only alternative)
+setup.sh                     One-time setup (macOS/Linux): creates .venv, installs deps, downloads the model
+setup.bat                    One-time setup (Windows), same as setup.sh but native - no Git Bash/WSL needed
+app.sh                       Activates .venv and starts the app (Run + Config tabs)
+run.sh                       Activates .venv and runs the pipeline headless, no UI
 Start Speech To Keyboard.app Double-click launcher for non-technical users (macOS, no terminal)
 Start Speech To Keyboard.vbs Double-click launcher for non-technical users (Windows, no terminal)
 ```
-
-## Setup, in detail
-
-```bash
-./setup.sh
-```
-
-Creates a `.venv/` virtual environment if one doesn't already exist, installs `requirements.txt` into it, and downloads `vosk-model-small-en-us-0.15` (~40MB) into `models/` (skipped if already present). Run `./setup.sh --dev` instead to also install `requirements-dev.txt` (adds pytest). Re-running `./setup.sh` any time is safe -- it's idempotent.
-
-Activate the environment in new shells with:
-
-```bash
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
-```
-
-Prefer to do it by hand instead of using the script? That works too:
-
-```bash
-python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-python scripts/download_vosk_model.py
-```
-
-## Using the app: Run + Config tabs
-
-`./app.sh` starts one web app at `http://127.0.0.1:8765` with two tabs — it's meant to feel like a single program, not two separate tools:
-
-**Run tab** (the actual product): a status indicator, Start/Stop buttons, a "Quit app" button, and a live activity log. Clicking Start runs the speech-to-keyboard pipeline — engine, activation mode, keyboard injection, everything from `config.yaml` — inside this same server process, in a background thread. Every dispatched command shows up in the activity log (`heard "..." -> command_name (key=..., Nms)`) as it happens. Stop shuts the pipeline down cleanly and releases the microphone; Quit closes the whole app (see [Running it with no terminal](#running-it-with-no-terminal) below for why that matters).
-
-**Config tab** (the settings/design surface):
-
-- An editable table of commands (name, phrases, optional Rhino intent, key) with add/delete rows and a "Save to config.yaml" button. Saving preserves the comments and structure of the rest of the file.
-- A **typed-phrase tester**: type any phrase and see whether it matches one of your current (even unsaved) commands — useful for quickly checking phrase wording, including longer sentences like "under the tree" or "over the hill", without needing to speak.
-- A **spoken-phrase tester**: click "Record & test", speak into your mic for the configured window (default 6s), and see exactly what Vosk heard and whether it matched — the real end-to-end check, since typed-text matching can pass while the actual recognizer still mishears a longer phrase.
-
-The Run pipeline and the spoken-phrase tester both need exclusive access to the microphone, so only one can be active at a time — starting one while the other is busy returns a clear "in use" message instead of a confusing crash. The typed-phrase tester doesn't touch the mic, so it always works, even while Run is active.
-
-Phrase testing always goes through the Vosk engine (even if `engine: rhino` is set in config.yaml for the actual Run pipeline), since Vosk can be pointed at any ad hoc phrase list on the fly — Rhino's intents are baked into a compiled context file, so testing new phrases against it requires retraining that context in the Picovoice Console instead.
-
-Prefer a plain terminal with no web UI? `./run.sh` runs the identical pipeline headless — the web app's Run tab is just a thin control layer on top of the same `src/main.py` code.
-
-## Running it with no terminal
-
-For a non-technical user, double-click:
-
-- **macOS**: `Start Speech To Keyboard.app`
-- **Windows**: `Start Speech To Keyboard.vbs`
-
-Either one starts the app with no visible console/terminal window, waits for it to be ready, and opens it in the default browser automatically. Output is captured to `app.log` in the project folder on macOS (there's no console to print to otherwise); on Windows there's no console at all, so use `./run.sh -v` from a terminal if you need to see error details.
-
-**Setup still needs a terminal once.** These launchers only start an already-set-up app -- `./setup.sh` (which creates `.venv`, installs dependencies, and downloads the speech model) has to be run from an actual terminal first, on both platforms. After that one-time step, the double-click launcher is all that's needed going forward.
-
-**To close the app**, click "Quit app" in the Run tab. That's the only way to close it cleanly when launched this way, since there's no window or terminal to close otherwise -- it stops the recognition pipeline (if running) and shuts down the whole server process. If the app ever becomes unresponsive and Quit doesn't work, it can be force-closed like any other stuck process (Activity Monitor on macOS, Task Manager on Windows -- look for `python` or `pythonw`).
 
 ## Configuring commands
 
@@ -126,51 +130,50 @@ Each entry in `config.yaml`'s `commands:` list defines one voice command (editab
   key: left                                   # canonical key name (see below)
 ```
 
-You don't need both `phrases` and `rhino_intent` — only the field your active engine uses matters, but keeping both in sync makes switching engines painless. Phrases can be longer sentences too, not just single words — e.g. `["under the tree", "go under the tree"]` — the grammar-constrained recognizer treats the whole phrase as one matchable unit. If a heard phrase could match more than one command (e.g. "stop" and "stop the music" both match "please stop the music"), the longest, most specific phrase wins.
+You don't need both `phrases` and `rhino_intent` - only the field the active engine uses matters, but keeping both in sync makes switching engines painless. Phrases can be longer sentences too, not just single words - e.g. `["under the tree", "go under the tree"]` - the recognizer treats the whole phrase as one matchable unit. If a heard phrase could match more than one command (e.g. "stop" and "stop the music" both match "please stop the music"), the longest, most specific phrase wins.
 
-Canonical key names: `left right up down space enter esc tab shift_l shift_r ctrl_l ctrl_r alt_l alt_r`, plus single letters (`a`-`z`), digits (`0`-`9`), and `f1`-`f12`. These map to the right OS-level key code automatically (see below).
+Canonical key names: `left right up down space enter esc tab shift_l shift_r ctrl_l ctrl_r alt_l alt_r`, plus single letters (`a`-`z`), digits (`0`-`9`), and `f1`-`f12`. These map to the right OS-level key code automatically.
 
 ## Keyboard layouts and non-US input
 
-If your OS's active input language is anything other than a US layout (e.g. Hebrew), typed/character-based key injection breaks in a specific way: pressing "q" can come out as a completely different character in the game, because the OS translates key events through whatever layout is *currently active*, not the layout the config was written against.
+If the active input language is anything other than English/US (e.g. Hebrew), naive key injection breaks in a specific way: pressing "q" can come out as a completely different character in the game, because the OS translates key events through whatever layout is *currently active*.
 
-This project avoids that by injecting the raw OS-level key code directly (Windows virtual-key codes via `SendInput`, macOS virtual keycodes via `pynput`) instead of asking the OS to "produce this character." That matters because Unity's own `KeyCode` works the same way internally -- `KeyCode.Q` is a fixed code tied to a physical position on a reference US keyboard, not "whatever the Q key currently types" -- so injecting by code, not by character, is what actually matches what Unity checks. In other words: switching your system to Hebrew input shouldn't affect this project's key presses at all, on Windows or macOS.
+This project avoids that by injecting the raw OS-level key code directly (Windows virtual-key codes via `SendInput`, macOS virtual keycodes via `pynput`) instead of asking the OS to "produce this character." That matters because Unity's own `KeyCode` works the same way internally - `KeyCode.Q` is a fixed code tied to a physical position on a reference US keyboard, not "whatever the Q key currently types." So switching the system's input language shouldn't affect this app's key presses at all, on Windows or macOS.
 
-Linux is the exception: pynput's X11 backend only supports character-based key synthesis, so the same layout sensitivity described above can still occur there. Windows and macOS are this project's supported/tested platforms, so this hasn't been a priority to fix for X11.
+Linux is the exception: pynput's X11 backend only supports character-based key synthesis, so the same layout sensitivity can still occur there. Windows and macOS are this project's supported/tested platforms.
 
-**Testing this with a text editor is misleading.** A text editor only ever shows you the *translated character*, which is expected to change with your active input language no matter what -- that's what having a different layout means, and no injection method changes it. It says nothing about whether the underlying keycode (what Unity actually reads) changed. Run `python scripts/test_keyboard_layout.py` instead: it prints both the raw keycode and the translated character for each key it sends, so you can confirm the keycode stays identical across a layout switch even though the character doesn't (or, if the keycode does change, that's a real bug worth reporting).
+**Testing this with a text editor is misleading.** A text editor only ever shows the *translated character*, which is expected to change with the active input language no matter what - that's what having a different layout means, and no injection method changes it. It says nothing about whether the underlying keycode (what Unity actually reads) changed. Run `python scripts/test_keyboard_layout.py` instead: it prints both the raw keycode and the translated character for each key it sends, so you can confirm the keycode stays identical across a layout switch even though the character doesn't.
 
 ## Activation modes
 
 Set `activation.mode` in `config.yaml`:
 
-- **`always_on`** (default) — continuously streams the microphone. Vosk does its own silence-based endpointing, so no separate voice-activity-detection step is needed. Simplest to use hands-free, but background noise or the model mis-hearing something as a command phrase is a real risk — tune the grammar and `matching.cooldown_seconds` if you see false triggers.
-- **`push_to_talk`** — only listens while `activation.push_to_talk_key` is held down. Zero false triggers and no silence-timeout to wait through, so it's usually the lowest *perceived* latency option. Good default if the game already dedicates a key/button to "talk."
-- **`wake_word`** — says `activation.wake_word` first, then a `activation.wake_window_seconds` window opens for the actual command. Currently only supported with the Vosk engine (it works by swapping the recognizer's grammar at runtime).
+- **`always_on`** (default) - continuously listens. The recognizer detects when you've stopped talking on its own. Simplest to use hands-free, but background noise or a mis-heard phrase is a real risk - tune the command phrases and `matching.cooldown_seconds` if you see false triggers.
+- **`push_to_talk`** - only listens while `activation.push_to_talk_key` is held down. Zero false triggers, and reacts the instant the key is released. Good if the game already dedicates a key/button to "talk."
+- **`wake_word`** - say `activation.wake_word` first, then a `activation.wake_window_seconds` window opens for the actual command. Currently only supported with the Vosk engine.
 
 ## Latency tuning
 
-Every dispatched command logs a recognition-to-dispatch time in milliseconds — that's the gap between the engine finishing recognition and the key press firing (dispatch itself is typically sub-millisecond; this number is really telling you how the recognizer/activation mode is performing). The Run tab's activity log shows this per command too. For partial-result debug logging (terminal only), run headless with `-v`:
-
-```bash
-./run.sh -v
-```
+Every dispatched command logs a recognition-to-dispatch time in milliseconds in the Run tab's activity log (and in the terminal, if running headless) - that's the gap between the engine finishing recognition and the key press firing, which is really telling you how the recognizer/activation mode is performing.
 
 Things worth trying if latency feels high:
 
-1. **Use `push_to_talk` instead of `always_on`.** Always-on waits for Vosk's internal silence detector to decide you've stopped talking; push-to-talk finalizes the instant you release the key.
-2. **Keep the grammar small.** Fewer/simpler phrases per command means faster decoding and fewer ambiguous matches.
-3. **Stick with the small Vosk model** (`vosk-model-small-en-us-0.15`) rather than the large one — accuracy differences barely matter with a constrained grammar, but the large model is much slower per frame.
-4. **Try Rhino.** If Vosk's latency isn't enough, Rhino's single end-to-end model tends to beat the transcribe-then-match approach.
-5. **Lower `preferred_frame_bytes`** (edit `VoskEngine.__init__`) for smaller audio chunks — trades a bit of CPU overhead for snappier partial/final results.
+1. **Use `push_to_talk` instead of `always_on`.** Always-on waits for the recognizer's own silence detector to decide you've stopped talking; push-to-talk finalizes the instant the key is released.
+2. **Keep phrases short and few per command.** Fewer/simpler phrases means faster decoding and fewer ambiguous matches.
+3. **Stick with the small Vosk model** (`vosk-model-small-en-us-0.15`, the default) rather than a larger one - accuracy differences barely matter with a constrained command set, but larger models are slower per frame.
+4. **Try Rhino** (see below) - its single end-to-end model tends to beat a transcribe-then-match approach for a small fixed command set.
 
 ## Switching to Picovoice Rhino
 
+By default this project uses Vosk, which works fully offline with no account needed. Picovoice Rhino is a "speech-to-intent" engine that skips transcription entirely and maps audio straight to a command, which can push latency and accuracy further for a small fixed command set - at the cost of needing a free Picovoice account and a bit of setup:
+
 1. `pip install pvrhino`
 2. Create a free AccessKey at [console.picovoice.ai](https://console.picovoice.ai).
-3. In the console, create a Speech-to-Intent context with one intent per command (`moveLeft`, `moveRight`, `jump`, `crouch`, `stop`) and the expressions you want to trigger each. Download the compiled `.rhn` file for your OS.
+3. In the console, create a Speech-to-Intent context with one intent per command (`moveLeft`, `moveRight`, `jump`, `crouch`, `stop`) and the expressions that should trigger each. Download the compiled `.rhn` file for your OS.
 4. In `config.yaml`: set `engine: rhino`, fill in `rhino.access_key` and `rhino.context_path`, and make sure each command's `rhino_intent` matches the intent names from your context.
-5. `wake_word` activation mode isn't supported with Rhino yet — use `always_on` or `push_to_talk`.
+5. `wake_word` activation mode isn't supported with Rhino yet - use `always_on` or `push_to_talk`.
+
+Either engine can be used for the actual Run pipeline; the Config tab's phrase testers always use Vosk, since it can test arbitrary phrases on the fly, while Rhino's commands are fixed at context-compile time.
 
 ## Testing
 
@@ -179,24 +182,8 @@ pip install -r requirements-dev.txt
 pytest tests/
 ```
 
-Tests run without a microphone, model, or OS-specific keyboard backend — they're pure logic tests, safe to run anywhere including CI.
-
-## Troubleshooting
-
-**Getting a 403 (or the page won't load) at `http://127.0.0.1:8765`.** Something else is very likely already listening on that port. The most common cause on macOS is AirPlay Receiver, which by default listens on port 5000 (that's specifically why this app defaults to 8765 instead) -- but any other local dev server, or a previous copy of this app that didn't shut down cleanly, can cause the same symptom on any port. To check:
-
-```bash
-lsof -nP -iTCP:8765 -sTCP:LISTEN
-```
-
-If that shows an unexpected process, either quit it or run this app on a different port instead: `./app.sh --port 8080` (and the same `--port` flag works with `./run.sh` or `python -m src.ui.server`). The double-click launchers currently assume the default port, so if you change it, launch via `./app.sh --port <N>` from a terminal instead of double-clicking.
-
-**Nothing happens when a command should fire.** Check the Run tab's activity log (or terminal output with `-v`) for a "Heard ... -> no command matched" style message versus no output at all -- the former means recognition is working but the phrase needs tuning (see the Config tab's testers); the latter means audio isn't reaching the recognizer at all (check mic permissions for your terminal/the app in System Settings, and that the right input device is selected as your system default mic).
-
-**Keys aren't registering in the game at all.** Run `python scripts/test_keyboard.py` with the game window focused to isolate whether it's an injection problem or a recognition problem.
-
-**Keys come out wrong under a non-US input language.** See [Keyboard layouts and non-US input](#keyboard-layouts-and-non-us-input) above.
+Tests run without a microphone, model, or OS-specific keyboard backend - they're pure logic tests, safe to run anywhere including CI.
 
 ## Next steps (not covered here)
 
-This project stops at "a key gets pressed." Wiring it into the actual Unity game is a separate step — since it's just simulated OS-level keyboard input, any Unity project reading `Input.GetKey`/`Input.GetKeyDown` (old Input Manager) or the new Input System's keyboard device should pick it up with no game-side changes, as long as the game window has focus when a command fires.
+This project stops at "a key gets pressed." Wiring it into the actual Unity game is a separate step - since it's just simulated OS-level keyboard input, any Unity project reading `Input.GetKey`/`Input.GetKeyDown` (old Input Manager) or the new Input System's keyboard device should pick it up with no game-side changes, as long as the game window has focus when a command fires.

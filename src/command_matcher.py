@@ -57,7 +57,7 @@ class CommandMatcher:
         # Fall back to substring containment so e.g. "please go left now"
         # still matches the "left" command. Multiple phrases can contain
         # each other (e.g. "stop" and "stop the music" both match "please
-        # stop the music") -- prefer the longest one since it's the most
+        # stop the music") - prefer the longest one since it's the most
         # specific.
         best_phrase = None
         best_command = None

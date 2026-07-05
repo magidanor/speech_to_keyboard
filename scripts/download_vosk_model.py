@@ -15,7 +15,7 @@ BASE_URL = "https://alphacephei.com/vosk/models/{model}.zip"
 MODELS_DIR = Path(__file__).resolve().parent.parent / "models"
 
 MODEL_CHOICES = {
-    "vosk-model-small-en-us-0.15": "~40MB, fastest -- recommended starting point for a closed command set.",
+    "vosk-model-small-en-us-0.15": "~40MB, fastest - recommended starting point for a closed command set.",
     "vosk-model-en-us-0.22-lgraph": "~128MB, a middle ground on size/accuracy.",
     "vosk-model-en-us-0.22": "~1.8GB, most accurate, higher latency/CPU cost.",
 }

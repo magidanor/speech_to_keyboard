@@ -1,5 +1,5 @@
 """Unit tests for the command-editor's server-side validation
-(src/ui/server.py's `_validate_commands`) -- no Flask server, mic, or model
+(src/ui/server.py's `_validate_commands`) - no Flask server, mic, or model
 needs to be running.
 
 Requires `flask` and `ruamel.yaml` (installed by `./setup.sh`); skipped

@@ -33,7 +33,7 @@ class AudioCapture:
 
     def _callback(self, indata, frames, time_info, status):
         if status:
-            # e.g. input overflow -- log but keep the audio thread alive.
+            # e.g. input overflow - log but keep the audio thread alive.
             logger.warning("Audio input status: %s", status)
         self._queue.put(bytes(indata))
 

@@ -129,7 +129,7 @@
 
   <section>
     <h2 style="margin-top:0">Test by speaking</h2>
-    <p class="hint">Uses your microphone and the Vosk engine to recognize what you actually say, then checks it against your current edits above -- the real end-to-end test for longer sentences.</p>
+    <p class="hint">Uses your microphone and the Vosk engine to recognize what you actually say, then checks it against your current edits above - the real end-to-end test for longer sentences.</p>
     <div class="row">
       <label for="seconds">Listen for</label>
       <input type="number" id="seconds" value="6" min="1" max="20" style="width:60px">
@@ -293,7 +293,7 @@ function updateAudioTestAvailability() {
   const note = document.getElementById("audio-note");
   if (latestRunStatus === "running" || latestRunStatus === "stopping") {
     btn.disabled = true;
-    note.textContent = "Stop recognition on the Run tab first -- it's using the microphone.";
+    note.textContent = "Stop recognition on the Run tab first - it's using the microphone.";
   } else {
     btn.disabled = false;
     note.textContent = "";
@@ -325,7 +325,7 @@ document.getElementById("quit-btn").addEventListener("click", async () => {
   try {
     await fetch("/api/quit", { method: "POST" });
   } catch (e) {
-    // Expected -- the server drops the connection as it exits.
+    // Expected - the server drops the connection as it exits.
   }
   clearInterval(pollTimer);
   document.body.innerHTML =
@@ -339,7 +339,7 @@ async function pollRunStatus() {
     res = await fetch("/api/run/status");
     data = await res.json();
   } catch (e) {
-    return; // server not reachable (e.g. mid-quit) -- just skip this tick
+    return; // server not reachable (e.g. mid-quit) - just skip this tick
   }
   latestRunStatus = data.status;
 

@@ -2,7 +2,7 @@
 
 Unity's `KeyCode` (both the legacy Input Manager and the new Input System)
 identifies a key by a fixed virtual-key/keycode value tied to a physical
-position on a reference US QWERTY keyboard -- not by "whatever character is
+position on a reference US QWERTY keyboard - not by "whatever character is
 currently printed on that key." That identity does not change when the
 user's active input language changes.
 
@@ -10,7 +10,7 @@ Character-based injection does not have that property: asking the OS to
 "produce the character 'q'" (or injecting the scan code of the physical Q
 position and letting the OS translate it) is resolved through the OS's
 *currently active keyboard layout*. On a US layout that happens to agree
-with what we want, but it silently breaks under other layouts -- e.g. the
+with what we want, but it silently breaks under other layouts - e.g. the
 standard Hebrew layout maps that same physical position to "/", so a config
 key of "q" would show up in the game as "/" whenever Hebrew input is active.
 

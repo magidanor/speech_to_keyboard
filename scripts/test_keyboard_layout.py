@@ -2,9 +2,9 @@
 """Diagnoses whether key injection is actually layout-independent, by
 separating two different things that "what key got pressed" can mean:
 
-  - the raw OS keycode -- this is what Unity's KeyCode reads, and should
+  - the raw OS keycode - this is what Unity's KeyCode reads, and should
     stay exactly the same no matter which input language is active.
-  - the translated character -- this is what a text editor displays, and
+  - the translated character - this is what a text editor displays, and
     is *expected* to change with the active input language (that's simply
     what "switching keyboard layout" means). It changing is not a bug and
     is not something key injection can or should override.
@@ -35,8 +35,8 @@ def main() -> None:
         print(
             "This diagnostic is for macOS/Linux (it uses pynput's Listener to observe\n"
             "keys). Windows injection already bypasses character translation entirely\n"
-            "via raw SendInput virtual-key codes -- see _WindowsBackend in\n"
-            "src/input/keyboard.py -- so there's nothing further to check there."
+            "via raw SendInput virtual-key codes - see _WindowsBackend in\n"
+            "src/input/keyboard.py - so there's nothing further to check there."
         )
         return
 
@@ -72,9 +72,9 @@ def main() -> None:
 
     listener.stop()
     print()
-    print("'vk' is the raw keycode -- compare this run's values against a run made")
+    print("'vk' is the raw keycode - compare this run's values against a run made")
     print("under a different input language (e.g. Hebrew). They should match exactly.")
-    print("'char' is the translated character -- it's expected to differ per layout;")
+    print("'char' is the translated character - it's expected to differ per layout;")
     print("that difference does not affect Unity, which reads keycodes, not characters.")
 
 

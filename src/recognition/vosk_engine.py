@@ -62,7 +62,7 @@ class VoskEngine(RecognitionEngine):
             return RecognitionResult(is_final=True, text=text)
 
         # Partial results are useful for on-screen/debug feedback but should
-        # not be used to trigger commands -- only act on is_final results.
+        # not be used to trigger commands - only act on is_final results.
         partial = json.loads(self._recognizer.PartialResult()).get("partial", "").strip()
         if partial:
             return RecognitionResult(is_final=False, text=partial)

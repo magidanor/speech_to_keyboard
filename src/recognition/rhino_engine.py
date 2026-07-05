@@ -1,6 +1,6 @@
 """Picovoice Rhino speech-to-intent engine (optional, opt-in).
 
-Unlike Vosk, Rhino never produces a free-text transcript -- it maps audio
+Unlike Vosk, Rhino never produces a free-text transcript - it maps audio
 directly to one of the intents defined in a Rhino "context" you design and
 compile for free at https://console.picovoice.ai. Because it's a single
 end-to-end model rather than a transcribe-then-parse pipeline, it tends to
@@ -22,7 +22,7 @@ Setup:
 
 Note: wake_word activation mode currently requires an engine that supports
 runtime grammar switching (VoskEngine); RhinoEngine intentionally raises in
-that case -- see WakeWordActivation in src/activation/modes.py.
+that case - see WakeWordActivation in src/activation/modes.py.
 """
 import logging
 import struct

@@ -64,7 +64,7 @@ def run(
     on_command_hook: Optional[OnCommandHook] = None,
 ) -> None:
     """Runs the speech-to-keyboard pipeline until `stop_event` is set (or
-    forever, if no stop_event is given -- e.g. plain CLI usage, stopped with
+    forever, if no stop_event is given - e.g. plain CLI usage, stopped with
     Ctrl+C instead).
     """
     config = load_config(config_path)

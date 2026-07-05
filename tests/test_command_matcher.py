@@ -1,4 +1,4 @@
-"""Unit tests for command matching -- no audio/mic required.
+"""Unit tests for command matching - no audio/mic required.
 
 Run with: pytest tests/
 """
@@ -45,7 +45,7 @@ def test_intent_match_for_rhino_style_result():
 
 
 def test_non_final_result_is_still_matchable_if_passed_in():
-    # CommandMatcher itself doesn't inspect is_final -- callers (activation
+    # CommandMatcher itself doesn't inspect is_final - callers (activation
     # modes) are responsible for only calling match() on final results.
     matcher = make_matcher()
     command = matcher.match(RecognitionResult(is_final=False, text="jump"))
@@ -68,7 +68,7 @@ def test_all_phrases_returns_normalized_list():
 
 def test_overlapping_phrases_prefer_the_longest_match():
     # "stop" and "stop the music" both contain-match "please stop the music"
-    # -- the longer, more specific phrase should win.
+    # - the longer, more specific phrase should win.
     commands = [
         CommandConfig(name="stop", key="s", phrases=["stop", "halt"]),
         CommandConfig(name="stop_music", key="m", phrases=["stop the music"]),

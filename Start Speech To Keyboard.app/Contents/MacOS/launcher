@@ -2,9 +2,13 @@
 # Double-click launcher for non-technical users: starts the app with no
 # visible Terminal window, then opens it in the default browser.
 #
-# To close the app, use the "Quit app" button inside the web page -- there
+# To close the app, use the "Quit app" button inside the web page - there
 # is no window from this launcher itself to close (it starts the server in
 # the background and exits immediately).
+#
+# If setup hasn't been run yet, this offers to run it for you (a Terminal
+# window opens showing its progress - that one-time step isn't hidden the
+# way normal app runs are).
 set -uo pipefail
 
 # This script lives at:
@@ -16,8 +20,39 @@ cd "$APP_DIR"
 LOG_FILE="$APP_DIR/app.log"
 
 if [[ ! -d ".venv" ]]; then
-  osascript -e 'display alert "Setup needed" message "Open a terminal in this folder and run ./setup.sh once before using this launcher."' >/dev/null 2>&1
-  exit 1
+  choice=$(osascript <<'APPLESCRIPT' 2>/dev/null
+display dialog "Setup hasn't been run yet.
+
+Run it now? A Terminal window will open showing progress - this only happens once." buttons {"Cancel", "Run Setup"} default button "Run Setup" with icon note
+button returned of result
+APPLESCRIPT
+)
+
+  if [[ "$choice" != "Run Setup" ]]; then
+    exit 1
+  fi
+
+  osascript <<APPLESCRIPT
+tell application "Terminal"
+    activate
+    do script "cd '$APP_DIR' && ./setup.sh; echo; read -p 'Setup finished. Press Enter to close this window...'; exit"
+end tell
+APPLESCRIPT
+
+  # Wait for setup.sh to finish (poll for the venv it creates) - generous
+  # timeout since installing dependencies and downloading the model can
+  # take a few minutes on a slow connection.
+  for i in $(seq 1 300); do
+    if [[ -d ".venv" ]]; then
+      break
+    fi
+    sleep 1
+  done
+
+  if [[ ! -d ".venv" ]]; then
+    osascript -e 'display alert "Speech To Keyboard" message "Setup did not finish successfully. Check the Terminal window for details."' >/dev/null 2>&1
+    exit 1
+  fi
 fi
 
 # Run detached so the server survives after this launcher process exits;

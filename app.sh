@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Activates the venv (must already exist -- run ./setup.sh first) and starts
+# Activates the venv (must already exist - run ./setup.sh first) and starts
 # the app: a Run tab (start/stop the speech-to-keyboard pipeline) and a
 # Config tab (edit commands, test phrases) in one local web server.
 #

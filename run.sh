@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Activates the venv (must already exist -- run ./setup.sh first) and starts
+# Activates the venv (must already exist - run ./setup.sh first) and starts
 # the speech-to-keyboard app. Any arguments are passed through to src/main.py.
 #
 # Usage:

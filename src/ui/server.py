@@ -1,7 +1,7 @@
 """Local web app: one program with a Run tab (start/stop the actual
 speech-to-keyboard pipeline) and a Config tab (edit the closed-set command
-list, test phrases -- typed or spoken, including longer multi-word sentences
-like "under the tree" -- against the live recognizer).
+list, test phrases - typed or spoken, including longer multi-word sentences
+like "under the tree" - against the live recognizer).
 
 Run with:
     python -m src.ui.server        # or just ./app.sh
@@ -16,7 +16,7 @@ launcher with no terminal to Ctrl+C.
 
 Phrase testing always uses the Vosk engine (regardless of `engine:` in
 config.yaml) since it can test arbitrary typed/spoken phrases against a
-grammar built on the fly -- Rhino's intents are fixed at context-compile
+grammar built on the fly - Rhino's intents are fixed at context-compile
 time, so it can't be probed with ad hoc phrases the same way. Testing and
 the live Run pipeline both need exclusive access to the microphone, so only
 one of them can be active at a time (enforced server-side).
@@ -53,7 +53,7 @@ _yaml.preserve_quotes = True
 _state: Dict[str, Any] = {
     "config_path": "config.yaml",
     "engine": None,  # VoskEngine used for testing, created in create_app()
-    "mic_owner": None,  # None | "test" | "run" -- who currently holds the mic
+    "mic_owner": None,  # None | "test" | "run" - who currently holds the mic
     "mic_owner_lock": threading.Lock(),
     "run_thread": None,
     "run_stop_event": None,
@@ -157,7 +157,7 @@ def _release_mic(owner: str) -> None:
 def _mic_busy_message() -> str:
     owner = _state["mic_owner"]
     if owner == "run":
-        return "Recognition is currently running -- stop it first."
+        return "Recognition is currently running - stop it first."
     if owner == "test":
         return "A phrase test is already in progress."
     return "The microphone is in use."
@@ -373,7 +373,7 @@ def run_status():
 
 @app.post("/api/quit")
 def quit_app():
-    """Shuts down the whole app -- the point of this endpoint is to give
+    """Shuts down the whole app - the point of this endpoint is to give
     non-technical users (running via a double-click launcher, with no
     terminal to Ctrl+C) a way to close the program from inside it.
     """

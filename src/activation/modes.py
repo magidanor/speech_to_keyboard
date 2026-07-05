@@ -12,7 +12,7 @@
 
 All three accept an optional `stop_event` in `run_forever()` so a caller
 (e.g. the web UI, running this in a background thread) can ask the loop to
-exit cleanly -- each polls the mic with a short timeout instead of blocking
+exit cleanly - each polls the mic with a short timeout instead of blocking
 forever so the stop request is noticed promptly.
 """
 import logging
